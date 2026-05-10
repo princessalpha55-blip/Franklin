@@ -18,6 +18,7 @@ process.on('exit', () => flushStats());
 import { setupCommand } from './commands/setup.js';
 import { startCommand } from './commands/start.js';
 import { balanceCommand } from './commands/balance.js';
+import { walletCheckCommand } from './commands/wallet-check.js';
 import { modelsCommand } from './commands/models.js';
 import { configCommand } from './commands/config.js';
 import { statsCommand } from './commands/stats.js';
@@ -124,6 +125,12 @@ program
   .command('balance')
   .description('Check wallet USDC balance')
   .action(balanceCommand);
+
+program
+  .command('wallet-check <address>')
+  .description('Scan a wallet for compromise risk on Base, Ethereum, or Solana')
+  .option('--chain <chain>', 'Override chain detection: solana, ethereum, or base')
+  .action((address: string, options: { chain?: string }) => walletCheckCommand(address, options));
 
 program
   .command('config <action> [key] [value]')
