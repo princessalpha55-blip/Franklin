@@ -1,6 +1,10 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { createPublicClient, http, type Address } from 'viem';
+import { mainnet, base, arbitrum } from 'viem/chains';
 
 const chainOptions = [
   { value: 'ethereum', label: 'Ethereum' },
@@ -9,10 +13,109 @@ const chainOptions = [
   { value: 'solana', label: 'Solana' },
 ];
 
+const RPC_URLS: Record<string, string> = {
+  ethereum: 'https://rpc.ankr.com/eth',
+  base: 'https://rpc.ankr.com/base',
+  arbitrum: 'https://rpc.ankr.com/arbitrum',
+};
+
 function getScoreClass(score: number) {
   if (score >= 70) return 'bg-success text-black';
   if (score >= 40) return 'bg-warning text-black';
   return 'bg-danger text-black';
+}
+
+function isEthereumAddress(address: string) {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function buildEvmClient(chain: string) {
+  const rpc = RPC_URLS[chain] || RPC_URLS.ethereum;
+  const network = chain === 'base' ? base : chain === 'arbitrum' ? arbitrum : mainnet;
+  return createPublicClient({
+    chain: network,
+    transport: http(rpc),
+  });
+}
+
+async function scanEvm(address: string, chain: string) {
+  const client = buildEvmClient(chain);
+  const findings: string[] = [];
+  const normalized = address.toLowerCase();
+
+  findings.push(`Chain: ${chain.charAt(0).toUpperCase() + chain.slice(1)}`);
+  findings.push(`Address: ${normalized}`);
+
+  const balance = await client.getBalance({ address: normalized as Address });
+  const nonce = await client.getTransactionCount({ address: normalized as Address });
+  const code = await client.getCode({ address: normalized as Address });
+
+  findings.push(`Balance: ${Number(balance) / 1e18} ETH-equivalent`);
+  findings.push(`Transaction count: ${nonce}`);
+  findings.push(`Contract account: ${code !== '0x' ? 'Yes' : 'No'}`);
+
+  let score = 100;
+  if (nonce === 0) {
+    findings.push('No on-chain history detected. This wallet is new or dormant.');
+    score -= 10;
+  }
+  if (balance === 0n) {
+    findings.push('Zero native balance. The wallet may be uncompromised or drained.');
+    score -= 20;
+  }
+  if (code !== '0x') {
+    findings.push('Address is a smart contract. Review the contract before trusting it.');
+    score -= 10;
+  }
+  if (balance < 1_000_000_000_000_000_000n && balance > 0n) {
+    findings.push('Low native balance. Monitor for suspicious outgoing transfers.');
+    score -= 5;
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  return { score, findings };
+}
+
+async function scanSolana(address: string) {
+  const findings: string[] = [];
+  const pubkey = new PublicKey(address);
+  const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+
+  findings.push('Chain: Solana');
+  findings.push(`Address: ${pubkey.toBase58()}`);
+
+  const balance = await connection.getBalance(pubkey);
+  const signatures = await connection.getSignaturesForAddress(pubkey, { limit: 20 });
+  const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubkey, {
+    programId: TOKEN_PROGRAM_ID,
+  });
+
+  findings.push(`Balance: ${(balance / 1e9).toFixed(6)} SOL`);
+  findings.push(`Recent transactions: ${signatures.length}`);
+  findings.push(`Token accounts: ${tokenAccounts.value.length}`);
+
+  let score = 100;
+  if (signatures.length === 0) {
+    findings.push('No recent activity detected. The wallet is dormant or newly created.');
+    score -= 10;
+  }
+  if (balance === 0) {
+    findings.push('Zero SOL balance. The wallet may have been drained or empty.');
+    score -= 20;
+  }
+
+  const delegateAccounts = tokenAccounts.value.filter((item) => {
+    const info = item.account.data.parsed.info;
+    return info.delegate && info.delegate !== null;
+  });
+
+  if (delegateAccounts.length > 0) {
+    findings.push(`Detected ${delegateAccounts.length} delegated token account(s). Review token approvals.`);
+    score -= 20;
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  return { score, findings };
 }
 
 export default function Home() {
@@ -29,30 +132,25 @@ export default function Home() {
     setReport([]);
     setScore(null);
 
-    if (!address.trim()) {
+    const trimmed = address.trim();
+    if (!trimmed) {
       setError('Enter a valid wallet address.');
+      return;
+    }
+
+    if (chain !== 'solana' && !isEthereumAddress(trimmed)) {
+      setError('Enter a valid EVM wallet address (0x...) for the selected chain.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: address.trim(), chain }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || 'Scan failed');
-      }
-
-      const data = await res.json();
-      setScore(data.score);
-      setReport(data.findings || []);
+      const result = chain === 'solana' ? await scanSolana(trimmed) : await scanEvm(trimmed, chain);
+      setScore(result.score);
+      setReport(result.findings);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unexpected error');
+      setError(err instanceof Error ? err.message : 'Unexpected scan error');
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +219,7 @@ export default function Home() {
               <div className="rounded-3xl border border-white/10 bg-zinc-950 p-6 text-left">
                 <p className="text-sm uppercase tracking-[0.3em] text-white/50">Security score</p>
                 <p className={`mt-4 inline-flex rounded-full px-4 py-2 text-sm font-semibold ${getScoreClass(score)}`}>{score}/100</p>
-                <p className="mt-4 text-sm text-white/70">A simple risk index based on activity, contract status, approvals, and token exposure.</p>
+                <p className="mt-4 text-sm text-white/70">A simple risk index based on activity, contract status, and balance signals.</p>
               </div>
 
               <div className="rounded-3xl border border-white/10 bg-zinc-950 p-6 text-left">
@@ -146,8 +244,8 @@ export default function Home() {
           {[
             'Wallet risk scan',
             'Security score',
-            'Dangerous approval detection',
-            'Scam contract alerts',
+            'Low-cost browser-only scanning',
+            'Pure GitHub Pages deployment',
           ].map((feature) => (
             <div key={feature} className="rounded-3xl border border-white/10 bg-white/5 p-6 text-left text-sm text-white/70">
               <p className="font-semibold text-white">{feature}</p>

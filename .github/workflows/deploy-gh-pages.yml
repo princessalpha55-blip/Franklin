@@ -1,0 +1,39 @@
+name: Deploy Wallet Compromise Checker to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: []
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd wallet-compromise-checker
+          npm ci
+
+      - name: Build and export static site
+        run: |
+          cd wallet-compromise-checker
+          npm run export
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./wallet-compromise-checker/out
+          publish_branch: gh-pages
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com

@@ -12,16 +12,14 @@ A simple public Web3 security app for instantly scanning wallet addresses on Eth
 
 ## Run locally
 
-1. Copy `.env.example` to `.env`.
-2. Add your `ALCHEMY_API_KEY` and `MORALIS_API_KEY`.
-3. Install dependencies:
+1. Install dependencies:
 
 ```bash
 cd wallet-compromise-checker
 npm install
 ```
 
-4. Start the app:
+2. Start the app:
 
 ```bash
 npm run dev
@@ -29,11 +27,9 @@ npm run dev
 
 5. Open `http://localhost:3000` in your browser.
 
-## Deploy to Cloudflare Pages
+## GitHub Pages deployment
 
-1. Create a Cloudflare Pages project and set the root directory to `wallet-compromise-checker`.
-2. Add the following GitHub secrets to your repo:
-   - `CLOUDFLARE_API_TOKEN`
-   - `CLOUDFLARE_ACCOUNT_ID`
-   - `CLOUDFLARE_PROJECT_NAME`
-3. Push to `main` and GitHub Actions will deploy automatically.
+This app is now static-export compatible.
+
+1. Add a GitHub Actions workflow to build and export the site.
+2. Publish the generated `wallet-compromise-checker/out` folder to GitHub Pages.
