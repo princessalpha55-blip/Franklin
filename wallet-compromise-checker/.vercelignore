@@ -7,3 +7,7 @@ package-lock.json
 tsconfig.json
 postcss.config.js
 tailwind.config.ts
+out/
+.next/
+.vercel/
+*.log
