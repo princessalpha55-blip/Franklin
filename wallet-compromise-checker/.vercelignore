@@ -1,0 +1,9 @@
+.next
+node_modules
+.git
+.gitignore
+README.md
+package-lock.json
+tsconfig.json
+postcss.config.js
+tailwind.config.ts
