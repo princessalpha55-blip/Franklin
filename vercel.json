@@ -1,0 +1,5 @@
+{
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "buildCommand": "cd wallet-compromise-checker && npm install && npm run build"
+}

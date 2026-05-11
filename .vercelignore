@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.git/
+.github/
+wallet-compromise-checker/node_modules/
+wallet-compromise-checker/.next/
+wallet-compromise-checker/out/
+*.log
